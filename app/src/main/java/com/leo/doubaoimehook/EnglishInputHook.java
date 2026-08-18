@@ -10,7 +10,6 @@ import de.robv.android.xposed.XposedHelpers;
 final class EnglishInputHook {
     private static final String KEYBOARD_JNI = "com.bytedance.android.doubaoime.KeyboardJni";
     private static final String IME_SERVICE = "com.bytedance.android.doubaoime.ImeService";
-    private static final String KEYBOARD_CALLBACK = "keyboard_callback";
     private static final String TAG = "[doubao-ime-hook] ";
 
     private static String lastPreedit = "";
@@ -37,13 +36,22 @@ final class EnglishInputHook {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
+                        if (isPasswordInput(keyboardJni)) {
+                            String current = (String) param.args[0];
+                            if (handlePasswordPreedit(keyboardJni, current)) {
+                                param.setResult(null);
+                            }
+                            resetPreedit();
+                            return;
+                        }
                         if (!isEnglishKeyboard(keyboardJni, param.thisObject)) {
                             resetPreedit();
                             return;
                         }
 
                         String current = (String) param.args[0];
-                        if (!PreeditDelta.isAsciiLetters(current)) {
+                        if (!EnglishInputPolicy.shouldInterceptPreedit(
+                                true, false, current)) {
                             resetPreedit();
                             return;
                         }
@@ -63,6 +71,9 @@ final class EnglishInputHook {
                         if (!isEnglishKeyboard(keyboardJni, param.thisObject)) {
                             return;
                         }
+                        if (isPasswordInput(keyboardJni)) {
+                            return;
+                        }
                         pendingNativeCommit = " ";
                     }
 
@@ -79,6 +90,9 @@ final class EnglishInputHook {
                         if (!isEnglishKeyboard(keyboardJni, param.thisObject)) {
                             return;
                         }
+                        if (isPasswordInput(keyboardJni)) {
+                            return;
+                        }
                         boolean punctuationMode = (Boolean) param.args[0];
                         pendingNativeCommit = punctuationMode ? ". " : " ";
                     }
@@ -93,6 +107,9 @@ final class EnglishInputHook {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 String text = param.args[0] instanceof String ? (String) param.args[0] : null;
+                if (isPasswordInput(keyboardJni)) {
+                    return;
+                }
                 if (pendingNativeCommit != null) {
                     String pendingCommit = pendingNativeCommit;
                     pendingNativeCommit = null;
@@ -104,9 +121,10 @@ final class EnglishInputHook {
                     return;
                 }
 
-                if (!isEnglishKeyboard(keyboardJni, param.thisObject)
-                        || param.args.length < 3
-                        || !KEYBOARD_CALLBACK.equals(param.args[2])) {
+                String source = param.args.length > 2 && param.args[2] instanceof String
+                        ? (String) param.args[2] : "";
+                if (!EnglishInputPolicy.shouldFilterKeyboardCallback(
+                        isEnglishKeyboard(keyboardJni, param.thisObject), false, source, text)) {
                     return;
                 }
 
@@ -129,7 +147,9 @@ final class EnglishInputHook {
         XC_MethodHook callback = new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
-                if (isEnglishKeyboard(keyboardJni, param.thisObject)) {
+                boolean password = isPasswordInput(keyboardJni);
+                boolean english = isEnglishKeyboard(keyboardJni, param.thisObject);
+                if (EnglishInputPolicy.shouldSuppressCandidateCallbacks(english, password)) {
                     param.setResult(null);
                 }
             }
@@ -137,6 +157,8 @@ final class EnglishInputHook {
         XposedBridge.hookAllMethods(keyboardJni, "notifyCandidateBarSnapshot", callback);
         XposedBridge.hookAllMethods(keyboardJni, "notifyMoreCandidateSnapshot", callback);
         XposedBridge.hookAllMethods(keyboardJni, "notifyCandidateBarPinyin", callback);
+        XposedBridge.hookAllMethods(keyboardJni, "notifyCandidateBarPinyin9Symbols", callback);
+        XposedBridge.hookAllMethods(keyboardJni, "notifyCandidateBarSymbolRecent", callback);
     }
 
     private static void hookLifecycle(Class<?> keyboardJni, ClassLoader classLoader) {
@@ -171,6 +193,30 @@ final class EnglishInputHook {
 
     private static boolean commitText(Class<?> keyboardJni, String text) {
         return applyEdit(keyboardJni, 0, text);
+    }
+
+    private static boolean handlePasswordPreedit(Class<?> keyboardJni, String current) {
+        if (!EnglishInputPolicy.hasAsciiLetterPrefixWithSuffix(current)) {
+            return false;
+        }
+
+        InputConnection inputConnection = getInputConnection(keyboardJni);
+        if (inputConnection == null) {
+            return false;
+        }
+
+        try {
+            CharSequence beforeCursor = inputConnection.getTextBeforeCursor(current.length(), 0);
+            String suffix = EnglishInputPolicy.replayedPreeditSuffix(
+                    beforeCursor == null ? null : beforeCursor.toString(), current);
+            if (suffix == null) {
+                return false;
+            }
+            return suffix.isEmpty() || commitText(keyboardJni, suffix);
+        } catch (Throwable throwable) {
+            XposedBridge.log(TAG + "password preedit handling failed: " + throwable);
+            return false;
+        }
     }
 
     private static void finishPendingNativeCommit(Class<?> keyboardJni, MethodHookParam param) {
@@ -235,6 +281,16 @@ final class EnglishInputHook {
             }
             Object result = XposedHelpers.callMethod(keyboard, "IsEnglishKeyboard");
             return Boolean.TRUE.equals(result);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isPasswordInput(Class<?> keyboardJni) {
+        try {
+            Object value = XposedHelpers.getStaticObjectField(
+                    keyboardJni, "mCurrentEditboxIsPasswordType");
+            return Boolean.TRUE.equals(value);
         } catch (Throwable ignored) {
             return false;
         }
