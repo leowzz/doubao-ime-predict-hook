@@ -1,0 +1,95 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify tag version
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/repo_version.py --root . check "$RELEASE_TAG"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore release keystore
+        env:
+          DOUBAO_IME_KEYSTORE_BASE64: ${{ secrets.DOUBAO_IME_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$DOUBAO_IME_KEYSTORE_BASE64"
+          printf '%s' "$DOUBAO_IME_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/doubao-ime-release.jks"
+          test -s "$RUNNER_TEMP/doubao-ime-release.jks"
+
+      - name: Run unit tests and build signed APK
+        env:
+          DOUBAO_IME_KEYSTORE_FILE: ${{ runner.temp }}/doubao-ime-release.jks
+          DOUBAO_IME_KEYSTORE_PASSWORD: ${{ secrets.DOUBAO_IME_KEYSTORE_PASSWORD }}
+          DOUBAO_IME_KEY_ALIAS: ${{ secrets.DOUBAO_IME_KEY_ALIAS }}
+          DOUBAO_IME_KEY_PASSWORD: ${{ secrets.DOUBAO_IME_KEY_PASSWORD }}
+        run: |
+          test -n "$DOUBAO_IME_KEYSTORE_PASSWORD"
+          test -n "$DOUBAO_IME_KEY_ALIAS"
+          test -n "$DOUBAO_IME_KEY_PASSWORD"
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease
+
+      - name: Stage release assets
+        run: |
+          mkdir -p release
+          source_apk="app/build/outputs/apk/release/app-release.apk"
+          release_apk="release/doubao-ime-predict-hook-${{ steps.version.outputs.version }}.apk"
+          test -f "$source_apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$source_apk"
+          cp "$source_apk" "$release_apk"
+          sha256sum "$release_apk" > "$release_apk.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doubao-ime-predict-hook-${{ github.ref_name }}
+          path: release/
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Doubao IME Hook ${{ github.ref_name }}
+          body: Signed Android release APK for ${{ github.ref_name }}.
+          files: |
+            release/doubao-ime-predict-hook-${{ steps.version.outputs.version }}.apk
+            release/doubao-ime-predict-hook-${{ steps.version.outputs.version }}.apk.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

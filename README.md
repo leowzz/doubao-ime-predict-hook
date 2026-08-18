@@ -30,10 +30,27 @@
 ## 构建
 
 ```bash
-gradle :app:testDebugUnitTest :app:assembleDebug
+make test
+make build
 ```
 
 输出 APK：`app/build/outputs/apk/debug/app-debug.apk`。安装后需在 LSPosed 中勾选豆包输入法作用域并重启豆包输入法进程；本机尚未完成实机注入验收。
+
+## 发布
+
+版本号维护在 `gradle.properties`。发布前确保工作区干净，然后执行：
+
+```bash
+make release
+```
+
+默认递增 patch 版本，也可以指定版本：
+
+```bash
+make release V=v1.0.0
+```
+
+推送生成的 `vX.Y.Z` tag 后，GitHub Actions 会运行单元测试、构建签名 APK，并将 APK 和 SHA-256 文件发布到 GitHub Release。
 
 ## 进程历史
 

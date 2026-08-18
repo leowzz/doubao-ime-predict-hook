@@ -3,6 +3,24 @@ plugins {
 }
 
 def xposedApiJar = file("../xposed-api-stub/build/libs/xposed-api-stub.jar")
+def moduleVersionName = providers.gradleProperty("VERSION_NAME").getOrElse("1.0.0")
+def moduleVersionCode = providers.gradleProperty("VERSION_CODE").getOrElse("1000000").toInteger()
+def releaseKeystoreFile = providers.environmentVariable("DOUBAO_IME_KEYSTORE_FILE")
+def releaseKeystorePassword = providers.environmentVariable("DOUBAO_IME_KEYSTORE_PASSWORD")
+def releaseKeyAlias = providers.environmentVariable("DOUBAO_IME_KEY_ALIAS")
+def releaseKeyPassword = providers.environmentVariable("DOUBAO_IME_KEY_PASSWORD")
+def releaseSigningValues = [
+    releaseKeystoreFile,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+]
+def hasReleaseSigning = releaseSigningValues.every { it.isPresent() }
+if (releaseSigningValues.any { it.isPresent() } && !hasReleaseSigning) {
+    throw new GradleException(
+        "DOUBAO_IME_KEYSTORE_FILE, DOUBAO_IME_KEYSTORE_PASSWORD, DOUBAO_IME_KEY_ALIAS, and DOUBAO_IME_KEY_PASSWORD must be set together"
+    )
+}
 
 android {
     namespace "com.leo.doubaoimehook"
@@ -12,13 +30,27 @@ android {
         applicationId "com.leo.doubaoimehook"
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode moduleVersionCode
+        versionName moduleVersionName
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile file(releaseKeystoreFile.get())
+                storePassword releaseKeystorePassword.get()
+                keyAlias releaseKeyAlias.get()
+                keyPassword releaseKeyPassword.get()
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.getByName("release")
+            }
         }
     }
 

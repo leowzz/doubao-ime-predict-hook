@@ -3,7 +3,15 @@ build/
 app/build/
 xposed-api-stub/build/
 local.properties
+__pycache__/
+*.py[cod]
 
 # Local APK inputs and JADX output
 /apk/
 /decompile/
+
+# Local signing material and release staging
+/release/
+/keys/
+*.jks
+*.keystore
