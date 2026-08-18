@@ -10,6 +10,16 @@ final class EnglishInputPolicy {
         return english && !password && PreeditDelta.isAsciiLetters(current);
     }
 
+    static boolean shouldInterceptPreeditContinuation(
+            boolean english, boolean password, String previous, String current) {
+        return english
+                && !password
+                && previous != null
+                && !previous.isEmpty()
+                && current != null
+                && !current.isEmpty();
+    }
+
     static boolean shouldFilterKeyboardCallback(
             boolean english, boolean password, String source, String text) {
         return english

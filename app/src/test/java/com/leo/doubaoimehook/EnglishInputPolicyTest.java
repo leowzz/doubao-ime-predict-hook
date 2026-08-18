@@ -43,6 +43,48 @@ public class EnglishInputPolicyTest {
     }
 
     @Test
+    public void suffixPreeditIsInterceptedAfterCommittedEnglishPrefix() {
+        assertTrue(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "leo", "leo0"));
+    }
+
+    @Test
+    public void repeatedSuffixPreeditContinuesAfterNumericSuffix() {
+        assertTrue(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "leo0", "leo08"));
+    }
+
+    @Test
+    public void symbolSuffixPreeditIsInterceptedAfterCommittedEnglishPrefix() {
+        assertTrue(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "leo", "leo."));
+    }
+
+    @Test
+    public void trackedReplacementPreeditIsIntercepted() {
+        assertTrue(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "leo", "abc0"));
+    }
+
+    @Test
+    public void untrackedNonLetterPreeditStaysOnNativePath() {
+        assertFalse(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "", "0"));
+    }
+
+    @Test
+    public void emptyPreeditEndsTrackedSession() {
+        assertFalse(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, false, "leo08", ""));
+    }
+
+    @Test
+    public void suffixPreeditStaysOnNativePathForPasswordInput() {
+        assertFalse(EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                true, true, "leo", "leo0"));
+    }
+
+    @Test
     public void regularEnglishCandidateCommitIsStillFiltered() {
         assertTrue(EnglishInputPolicy.shouldFilterKeyboardCallback(
                 true, false, "keyboard_callback", "secret"));

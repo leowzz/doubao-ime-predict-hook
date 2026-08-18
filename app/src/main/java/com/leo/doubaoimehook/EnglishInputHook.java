@@ -36,8 +36,8 @@ final class EnglishInputHook {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
+                        String current = (String) param.args[0];
                         if (isPasswordInput(keyboardJni)) {
-                            String current = (String) param.args[0];
                             if (handlePasswordPreedit(keyboardJni, current)) {
                                 param.setResult(null);
                             }
@@ -49,9 +49,11 @@ final class EnglishInputHook {
                             return;
                         }
 
-                        String current = (String) param.args[0];
-                        if (!EnglishInputPolicy.shouldInterceptPreedit(
-                                true, false, current)) {
+                        boolean interceptPreedit = EnglishInputPolicy.shouldInterceptPreedit(
+                                true, false, current)
+                                || EnglishInputPolicy.shouldInterceptPreeditContinuation(
+                                        true, false, lastPreedit, current);
+                        if (!interceptPreedit) {
                             resetPreedit();
                             return;
                         }
