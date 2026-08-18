@@ -20,6 +20,24 @@ public class EnglishInputPolicyTest {
     }
 
     @Test
+    public void duplicatePasswordWordCommitIsSuppressed() {
+        assertTrue(EnglishInputPolicy.shouldSuppressPasswordCommit(
+                true, "keyboard_callback", "asd"));
+    }
+
+    @Test
+    public void singleCharacterPasswordCommitIsAllowed() {
+        assertFalse(EnglishInputPolicy.shouldSuppressPasswordCommit(
+                true, "keyboard_callback", "a"));
+    }
+
+    @Test
+    public void nonKeyboardPasswordCommitIsAllowed() {
+        assertFalse(EnglishInputPolicy.shouldSuppressPasswordCommit(
+                true, "paste", "asd"));
+    }
+
+    @Test
     public void regularEnglishPreeditStillUsesDirectCommit() {
         assertTrue(EnglishInputPolicy.shouldInterceptPreedit(true, false, "secret"));
     }

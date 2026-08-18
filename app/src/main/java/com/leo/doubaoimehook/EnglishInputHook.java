@@ -108,6 +108,12 @@ final class EnglishInputHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 String text = param.args[0] instanceof String ? (String) param.args[0] : null;
                 if (isPasswordInput(keyboardJni)) {
+                    String source = param.args.length > 2 && param.args[2] instanceof String
+                            ? (String) param.args[2] : "";
+                    if (EnglishInputPolicy.shouldSuppressPasswordCommit(true, source, text)) {
+                        resetPreedit();
+                        param.setResult(null);
+                    }
                     return;
                 }
                 if (pendingNativeCommit != null) {

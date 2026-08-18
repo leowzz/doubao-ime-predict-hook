@@ -18,6 +18,13 @@ final class EnglishInputPolicy {
                 && isAsciiWordWithOptionalTrailingSpaces(text);
     }
 
+    static boolean shouldSuppressPasswordCommit(boolean password, String source, String text) {
+        return password
+                && KEYBOARD_CALLBACK.equals(source)
+                && text != null
+                && text.length() > 1;
+    }
+
     static boolean shouldSuppressCandidateCallbacks(boolean english, boolean password) {
         return password || english;
     }
