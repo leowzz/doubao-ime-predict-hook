@@ -3,7 +3,7 @@
 [![Android Release](https://github.com/leowzz/doubao-ime-predict-hook/actions/workflows/release.yml/badge.svg)](https://github.com/leowzz/doubao-ime-predict-hook/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/leowzz/doubao-ime-predict-hook)](https://github.com/leowzz/doubao-ime-predict-hook/releases/latest)
 
-一个面向[豆包输入法](https://www.doubao.com/)的 LSPosed/Xposed 模块，用于关闭英文输入预测候选，并将英文 ASCII 字母直接提交到当前编辑器。
+一个面向豆包输入法的 LSPosed/Xposed 模块，用于关闭英文输入预测候选，并将英文 ASCII 字母直接提交到当前编辑器。
 
 豆包输入法默认会把正在输入的英文放入组合态，再通过候选栏预测完整单词。本模块将英文输入改成更接近传统硬件键盘的行为：输入 `h` 就立即提交 `h`，不需要点击预测候选，也不会因为候选词而改变已经输入的文本。
 
