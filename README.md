@@ -139,4 +139,4 @@ git push origin <branch> --follow-tags
 
 ## License
 
-仓库当前未包含 `LICENSE` 文件。在补充明确的开源许可证之前，默认不授予复制、修改或分发本项目代码的权限。
+本项目采用 [MIT License](LICENSE) 开源。该协议适用于本仓库的原创代码；第三方组件和依赖仍受其各自许可证约束。
