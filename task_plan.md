@@ -11,7 +11,10 @@
 - [completed] 3. 搜索输入连接、组合文本、候选和预测调用链
 - [completed] 4. 交叉检查混淆/动态加载/native 边界，确定 hook 方案
 - [completed] 5. 实现最小 LSPosed hook，并做离线构建与静态验证
-- [pending] 6. 整理手机侧安装、激活和实机验收步骤
+- [completed] 6. 完成手机侧安装、激活和英文混合预编辑实机验收
+- [completed] 7. 复现并最小化终端首次回车被延迟的问题
+- [completed] 8. 定位回车事件与预编辑会话之间的根因并增加回归测试
+- [completed] 9. 实现修复，重建安装并完成终端实机验收
 
 ## 成功标准
 
@@ -32,8 +35,15 @@
 | Gradle 8.5 找不到 Android SDK | 1 | 使用 git 忽略的本机 `local.properties` 指向已存在 SDK |
 | APK 级检查发现 `compileOnly project` 把 Xposed stub 类打入 dex | 1 | 改为生成 stub JAR 后用文件形式 `compileOnly`，并检查 APK dex 不含 stub 包 |
 | 覆盖安装后设备从 ADB 断开，无法完成安装后 `pm` 回读 | 1 | 保留安装命令的 `Success` 结果；记录设备回读为 Not Run |
+| 对目录直接运行 `rtk grep` 未递归 | 1 | 改用 `rtk proxy rg` 搜索源码目录 |
+| `adb shell input text` 中的 `>` 被设备 shell 当作重定向 | 1 | 对设备端 shell 转义 `>` 后再注入 Termux 文本 |
+| 最终验收时 Termux 命令行已有残留字符并进入 zsh 纠错提示 | 1 | 用 Ctrl+C 清空，截图确认空提示符后重跑；不把该轮当作产品结果 |
+| 将英文布局资源名 `key_26` 误作运行时 board 标识 | 1 | 直接记录 `getBoardEventName()` 返回值，改用实机值 `key_eng` 后重跑验收 |
+| `adb shell find` 的分组括号被设备 shell 解析失败 | 1 | 拆成不带分组的只读查询，并按已知精确路径清理测试文件 |
 
 ## 当前边界
 
 - Debug APK、单元测试、Manifest、zipalign、v2 签名和 dex 内容均已验证。
-- 手机安装、LSPosed 作用域启用、IME 进程重启和真实英文按键验收尚未执行；设备虽可 adb 连接，但 `su` 不可用，不能把注入状态当作已验证。
+- 已完成手机安装、LSPosed 注入确认，以及英文累积预编辑、上滑数字/符号、空格和退格实机验收。
+- 当前新增问题限定为终端编辑器：英文模式无候选词，但第一次回车只结束内部状态，第二次才向终端发送回车。
+- 已在干净 Termux 提示符完成验收：最后一个软键盘字母后第一次回车即可执行，普通回车不会重复发送。

@@ -18,3 +18,14 @@
 - 当前唯一未完成项为手机侧 LSPosed 安装/作用域/重启和真实输入验收；未执行安装，未盲操作设备输入。
 - 已增加 classic LSPosed 的 `xposedscope` 元数据，目标包为 `com.bytedance.android.doubaoime`；待重建并覆盖安装后由 Manager 读取推荐作用域。
 - 新 APK 已通过 `adb install -r` 返回 `Success` 覆盖安装；本地 APK Manifest 回读确认作用域值正确，但安装后设备立即断开，手机端 `pm` 回读和 LSPosed Manager UI 验证为 Not Run。
+- 后续已完成 LSPosed 重新注入和实机英文输入验收；混合预编辑会话修复提交为 `1c074c1`。
+- 新一轮问题：终端英文输入无候选词，但需要按两次回车才能真正换行。开始建立针对首次回车的事件级复现与回归信号。
+- 确认前台为 Termux，`EditorInfo inputType=0`；UI Automator 无法读取终端文本，改用一次回车后是否创建 `/sdcard` 测试目录作为可自动断言的实机信号。
+- 诊断版实机红色基线：第一次软键盘回车后测试目录缺失，第二次后存在。日志证明第一次没有 `DoFunctionKey(2)`，问题发生在 Java editor action 之前。
+- 单变量放行未跟踪的单字符 `DoCommit` 未改变结果，已证伪并撤销该临时改动。
+- 候选回调日志在复现场景中为空，排除候选 UI 回调短路；下一探针是在单字符 `DoCommit` 返回后异步调用 `finishPreeditNative(false, false)`。
+- `finishPreeditNative(false, false)` 探针成功调用但没有修复首回车，已撤销。
+- 触摸诊断定位根因：首次回车触摸提交最后一个字符但未派发功能键 2，第二次相同触摸才派发。新增 `RawEnterPolicy` 回归测试并先验证为红。
+- 第一版修复的早期绿灯未能在干净提示符上稳定复现；重新诊断发现 `getBoardEventName()` 实际返回 `key_eng`，原条件误用了布局资源名 `key_26`，导致补偿根本未触发。
+- 已将终端回车补偿限定到 `TYPE_NULL + key_eng + 右下回车触摸 + native 未派发 DoFunctionKey(2)`，移除全部临时诊断日志。
+- 最终 29 个单元测试和签名 release 构建通过，APK 覆盖安装并重新加载 hook。一次回车即创建 `/sdcard/dbfixed_e`；正常回车启动 `cat` 后守卫文件大小为 0，确认无双回车。

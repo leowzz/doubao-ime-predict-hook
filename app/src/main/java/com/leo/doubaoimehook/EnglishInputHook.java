@@ -1,5 +1,9 @@
 package com.leo.doubaoimehook;
 
+import android.text.InputType;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -9,11 +13,15 @@ import de.robv.android.xposed.XposedHelpers;
 
 final class EnglishInputHook {
     private static final String KEYBOARD_JNI = "com.bytedance.android.doubaoime.KeyboardJni";
+    private static final String KEYBOARD_VIEW = "com.bytedance.android.input.keyboard.KeyboardView";
     private static final String IME_SERVICE = "com.bytedance.android.doubaoime.ImeService";
+    private static final String ENGLISH_KEYBOARD_EVENT = "key_eng";
     private static final String TAG = "[doubao-ime-hook] ";
 
     private static String lastPreedit = "";
     private static String pendingNativeCommit;
+    private static boolean enterDispatchedDuringTouch;
+    private static boolean rawEnterTouchStarted;
 
     private EnglishInputHook() {
     }
@@ -23,6 +31,7 @@ final class EnglishInputHook {
             Class<?> keyboardJni = XposedHelpers.findClass(KEYBOARD_JNI, classLoader);
             hookPreedit(keyboardJni);
             hookCommits(keyboardJni);
+            hookRawEnter(keyboardJni, classLoader);
             hookCandidateCallbacks(keyboardJni);
             hookLifecycle(keyboardJni, classLoader);
             XposedBridge.log(TAG + "installed");
@@ -149,6 +158,70 @@ final class EnglishInputHook {
                 }
             }
         });
+    }
+
+    private static void hookRawEnter(Class<?> keyboardJni, ClassLoader classLoader) {
+        XposedBridge.hookAllMethods(keyboardJni, "DoFunctionKey", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                Object key = param.args.length > 0 ? param.args[0] : null;
+                if (Integer.valueOf(2).equals(key)) {
+                    enterDispatchedDuringTouch = true;
+                }
+            }
+        });
+
+        Class<?> keyboardView = XposedHelpers.findClass(KEYBOARD_VIEW, classLoader);
+        XposedHelpers.findAndHookMethod(keyboardView, "onTouchEvent", MotionEvent.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        MotionEvent event = (MotionEvent) param.args[0];
+                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                            enterDispatchedDuringTouch = false;
+                            View view = (View) param.thisObject;
+                            boolean rawInput = isRawInput(keyboardJni);
+                            boolean englishKeyboard = isEnglishKeyboardBoard(keyboardJni);
+                            boolean enterRegion = RawEnterPolicy.isEnterKeyRegion(
+                                    event.getX(), event.getY(),
+                                    view.getWidth(), view.getHeight());
+                            rawEnterTouchStarted = rawInput && englishKeyboard && enterRegion;
+                        }
+                    }
+
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        MotionEvent event = (MotionEvent) param.args[0];
+                        int action = event.getActionMasked();
+                        if (action == MotionEvent.ACTION_CANCEL) {
+                            rawEnterTouchStarted = false;
+                            return;
+                        }
+                        if (action != MotionEvent.ACTION_UP) {
+                            return;
+                        }
+                        View view = (View) param.thisObject;
+                        boolean rawInput = isRawInput(keyboardJni);
+                        boolean englishKeyboard = isEnglishKeyboardBoard(keyboardJni);
+                        boolean touchEndedOnEnter = RawEnterPolicy.isEnterKeyRegion(
+                                event.getX(), event.getY(), view.getWidth(), view.getHeight());
+                        boolean compensate = RawEnterPolicy.shouldCompensate(
+                                rawInput,
+                                englishKeyboard,
+                                rawEnterTouchStarted,
+                                touchEndedOnEnter,
+                                enterDispatchedDuringTouch);
+                        rawEnterTouchStarted = false;
+                        if (!compensate) {
+                            return;
+                        }
+                        try {
+                            XposedHelpers.callStaticMethod(keyboardJni, "DoFunctionKey", 2);
+                        } catch (Throwable throwable) {
+                            XposedBridge.log(TAG + "raw enter compensation failed: " + throwable);
+                        }
+                    }
+                });
     }
 
     private static void hookCandidateCallbacks(Class<?> keyboardJni) {
@@ -299,6 +372,27 @@ final class EnglishInputHook {
             Object value = XposedHelpers.getStaticObjectField(
                     keyboardJni, "mCurrentEditboxIsPasswordType");
             return Boolean.TRUE.equals(value);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isRawInput(Class<?> keyboardJni) {
+        try {
+            Object imeService = XposedHelpers.getStaticObjectField(keyboardJni, "mImeService");
+            Object value = XposedHelpers.callMethod(imeService, "getCurrentInputEditorInfo");
+            return value instanceof EditorInfo
+                    && ((EditorInfo) value).inputType == InputType.TYPE_NULL;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isEnglishKeyboardBoard(Class<?> keyboardJni) {
+        try {
+            Object keyboard = XposedHelpers.callStaticMethod(keyboardJni, "getKeyboardJni");
+            Object value = XposedHelpers.callMethod(keyboard, "getBoardEventName");
+            return ENGLISH_KEYBOARD_EVENT.equals(value);
         } catch (Throwable ignored) {
             return false;
         }
